@@ -4,6 +4,8 @@ import * as fs from 'fs';
 
 // Dynamically import the generated POM class
 async function loadPOMClass(pomFilePath: string): Promise<any> {
+  //add 3 sec delay to wait for the file to be created
+  await new Promise((resolve) => setTimeout(resolve, 3000));
   const pomModule = await import(pomFilePath);
   const className = Object.keys(pomModule)[0]; // Assume the first export is the POM class
   return pomModule[className];
@@ -62,9 +64,9 @@ test.describe('${POMClass.name} Tests', () => {
   }
 }
 
-// Example usage
-(async () => {
-  const pomFilePath = path.resolve(__dirname, '../pages/LoginPage.page.ts'); // Path to the generated POM
-  const testFilePath = path.resolve(__dirname, '../tests/login.spec.ts'); // Path to the generated test file
-  await generateTestCase(pomFilePath, testFilePath);
-})();
+// // Example usage
+// (async () => {
+//   const pomFilePath = path.resolve(__dirname, '../pages/samplePage.page.ts'); // Path to the generated POM
+//   const testFilePath = path.resolve(__dirname, '../tests/sample.spec.ts'); // Path to the generated test file
+//   await generateTestCase(pomFilePath, testFilePath);
+// })();

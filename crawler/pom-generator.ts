@@ -1,3 +1,4 @@
+node_modules/
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -34,93 +35,46 @@ export async function generatePOM(pageName: string, elements: DetectedElements):
   };
 
   const addFieldWithMethods = (type: string, selector: string): void => {
+    if (!selector || processedLocators.has(selector)) return;
+    processedLocators.add(selector);
+
+    // Escape single quotes in selector for safe code generation
+    const safeSelector = selector.replace(/'/g, "\\'");
+
     const name = sanitizeName(selector);
 
-    // Skip if the locator has already been processed
-    if (processedLocators.has(name)) {
-      return;
+    // Variable declaration
+    variableDeclarations.push(`  readonly ${name}: Locator;`);
+
+    // Constructor initialization
+    initializedLocators.push(`    this.${name} = page.locator('${safeSelector}');`);
+
+    // Methods based on type
+    if (type === 'input' || type === 'textarea') {
+      methods.push(`
+  async fill${name.charAt(0).toUpperCase() + name.slice(1)}(value: string) {
+    await this.${name}.fill(value);
+  }`);
     }
-    processedLocators.add(name);
-
-    // Add variable declaration
-    variableDeclarations.push(`  private readonly ${name}: Locator;`);
-    initializedLocators.push(`    this.${name} = page.locator('${selector}');`);
-
-    // Add getter and methods
-    methods.push(`  /** ${type.charAt(0).toUpperCase() + type.slice(1)} */`);
-    methods.push(`  get${name.charAt(0).toUpperCase() + name.slice(1)}(): Locator {`);
-    methods.push(`    return this.${name};`);
-    methods.push(`  }\n`);
-
-    if (type.toLowerCase().includes('input')) {
-      methods.push(`  async fill${name.charAt(0).toUpperCase() + name.slice(1)}(value: string): Promise<void> {`);
-      methods.push(`    await this.${name}.fill(value);`);
-      methods.push(`  }\n`);
-    } else if (type.toLowerCase().includes('button')) {
-      methods.push(`  async click${name.charAt(0).toUpperCase() + name.slice(1)}(): Promise<void> {`);
-      methods.push(`    await this.${name}.click();`);
-      methods.push(`  }\n`);
+    if (type === 'button' || type === 'link' || type === 'checkbox' || type === 'radio' || type === 'dropdown') {
+      methods.push(`
+  async click${name.charAt(0).toUpperCase() + name.slice(1)}() {
+    await this.${name}.click();
+  }`);
     }
   };
 
-  // Generate methods for all detected inputs
-  for (const input of elements.inputs) {
-    addFieldWithMethods('Input', input);
-  }
+  // Add fields and methods for each element type
+  Object.entries(elements).forEach(([type, selectors]) => {
+    selectors.forEach((selector) => addFieldWithMethods(type, selector));
+  });
 
-  // Generate methods for all detected buttons
-  for (const button of elements.buttons) {
-    addFieldWithMethods('Button', button);
-  }
-
-  // Generate methods for all detected dropdowns
-  for (const dropdown of elements.dropdowns) {
-    addFieldWithMethods('Dropdown', dropdown);
-  }
-
-  // Generate methods for all detected checkboxes
-  for (const checkbox of elements.checkboxes) {
-    addFieldWithMethods('Checkbox', checkbox);
-  }
-
-  // Generate methods for all detected radios
-  for (const radio of elements.radios) {
-    addFieldWithMethods('Radio', radio);
-  }
-
-  // Generate methods for all detected links
-  for (const link of elements.links) {
-    addFieldWithMethods('Link', link);
-  }
-
-  // Add variable declarations
+  // Build the class code
   code += variableDeclarations.join('\n') + '\n\n';
-
-  // Add constructor to initialize locators
-  code += `  constructor(page: Page) {\n`;
-  code += `    this.page = page;\n`;
-  code += initializedLocators.join('\n') + '\n';
-  code += `  }\n\n`;
-
-  // Add methods
-  code += methods.join('\n');
-
-  code += `}\n`;
-
-  // Write the generated POM to a file
-  const filePath = path.resolve(__dirname, `../pages/${pageName}.page.ts`); // Standardized file name
-  try {
-    // Check if the file already exists
-    if (fs.existsSync(filePath)) {
-      console.log(`File already exists: ${filePath}. Overwriting...`);
-    }
-
-    fs.writeFileSync(filePath, code);
-    console.log(`POM generated successfully at: ${filePath}`);
-  } catch (error) {
-    console.error(`Failed to write POM to file: ${filePath}`, error);
-    throw error;
-  }
+  code += `  constructor(page: Page) {\n    this.page = page;\n`;
+  code += initializedLocators.join('\n') + '\n  }\n';
+  code += methods.join('\n') + '\n';
+  code += '}\n';
 
   return code;
 }
