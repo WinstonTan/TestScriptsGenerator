@@ -18,15 +18,11 @@ This project automates the generation of Playwright Page Object Models (POMs) an
     ├── [tsconfig.json](http://_vscodecontentref_/2)           # TypeScript configuration
     └── [package.json](http://_vscodecontentref_/3)            # Project dependencies
 
-
-
 ## **Setup Instructions**
 
 ### **1. Install Dependencies**
 
 Run the following commands to set up the project:
-
-	
 
     mkdir playwright-test-project && cd playwright-test-project
     npm init -y
@@ -34,18 +30,29 @@ Run the following commands to set up the project:
     npx tsc --init  # Update "module" to "ESNext" in [tsconfig.json](http://_vscodecontentref_/4)
     mkdir -p {crawler,pages,tests,scripts}
 
-  
+### **2. Configure Environment Variables**
+
+Create a `.env` file in the root of your project to specify the target URL and POM base name:
+
+```
+BASE_URL=https://www.lambdatest.com/selenium-playground/input-form-demo
+POM_NAME=form
+```
+
+- `BASE_URL`: The URL of the page you want to crawl and generate the POM for.
+- `POM_NAME`: The base name for the generated POM and test files (e.g., `form` will generate `form.page.ts` and `form.spec.ts`).
+
+> **Note:** The scripts will automatically load these values from `.env` when generating POMs and tests.
+
 ## **Core Files**
 
 ### **1. Crawler (`crawler/explorer.ts`)**
 
-The crawler detects interactive elements on the target website, including specific fields like  `username`,  `password`, and  `login`  button.-   
-    
+The crawler detects interactive elements on the target website, including specific fields like  `username`,  `password`, and  `login`  button.
 
 ### **2. POM Generator (`crawler/pom-generator.ts`)**
 
 Generates a Playwright Page Object Model (POM) class based on the detected elements.
-
 
 ## **How to Run**
 
@@ -54,7 +61,7 @@ Generates a Playwright Page Object Model (POM) class based on the detected eleme
 npx ts-node scripts/generate-all.ts
 ```
 
-**Run Tests**:
+2.  **Run Tests**:
 ```
 npx playwright test
 ```

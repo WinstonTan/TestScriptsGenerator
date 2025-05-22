@@ -3,47 +3,35 @@ import { generatePOM } from '../crawler/pom-generator';
 import { crawlPage } from '../crawler/explorer';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as dotenv from 'dotenv';
 
-async function generateAndSavePOM(pomName: string, elements: {
-  inputs: string[];
-  buttons: string[];
-  dropdowns: string[];
-  checkboxes: string[];
-  radios: string[];
-  links: string[];
-}, pomFilePath: string) {
-  console.log('Generating POM...');
-  const pomCode = await generatePOM(pomName, elements);
-  fs.writeFileSync(pomFilePath, pomCode);
-  console.log(`POM generated at: ${pomFilePath}`);
-}
+// Load environment variables from .env file
+dotenv.config();
 
 async function main() {
   try {
-    // Define the base URL to crawl
-    const url = 'https://www.lambdatest.com/selenium-playground/input-form-demo';
+    // Fetch the base URL and POM name from .env
+    const url = process.env.BASE_URL;
+    const pomBase = process.env.POM_NAME || 'sample';
 
-    // Crawl the page to get elements
-    const crawledElements = await crawlPage(url);
-    console.log('Crawled elements:', crawledElements);
+    if (!url) {
+      throw new Error('BASE_URL is not defined in the environment variables.');
+    }
 
-    // Build the elements object as arrays of selector strings
-    const elements = {
-      inputs: crawledElements.filter((el: any) => el.type === 'input').map((el: any) => el.selector),
-      buttons: crawledElements.filter((el: any) => el.type === 'button').map((el: any) => el.selector),
-      dropdowns: crawledElements.filter((el: any) => el.type === 'dropdown').map((el: any) => el.selector),
-      checkboxes: crawledElements.filter((el: any) => el.type === 'checkbox').map((el: any) => el.selector),
-      radios: crawledElements.filter((el: any) => el.type === 'radio').map((el: any) => el.selector),
-      links: crawledElements.filter((el: any) => el.type === 'link').map((el: any) => el.selector),
-    };
+    // Crawl the page to get all detected elements
+    const detectedElements = await crawlPage(url);
+    console.log('Crawled elements:', detectedElements);
 
-    // Define paths for POM and test files
-    const pomName = 'samplePage';
-    const pomFilePath = path.resolve(__dirname, '../pages/sample.page.ts');
-    const testFilePath = path.resolve(__dirname, '../tests/sample.spec.ts');
+    // Define paths for POM and test files using POM_NAME
+    const pomName = `${pomBase}Page`;
+    const pomFilePath = path.resolve(__dirname, `../pages/${pomBase}.page.ts`);
+    const testFilePath = path.resolve(__dirname, `../tests/${pomBase}.spec.ts`);
 
     // Generate and save POM
-    await generateAndSavePOM(pomName, elements, pomFilePath);
+    console.log('Generating POM...');
+    const pomCode = await generatePOM(pomName, detectedElements);
+    fs.writeFileSync(pomFilePath, pomCode);
+    console.log(`POM generated at: ${pomFilePath}`);
 
     // Generate Test Case
     console.log('Generating Test Case...');

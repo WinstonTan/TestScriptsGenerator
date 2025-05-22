@@ -14,52 +14,107 @@ export async function crawlPage(url: string): Promise<DetectedElement[]> {
     await page.goto(url);
     await page.waitForTimeout(5000);
 
-    // Helper to extract a meaningful selector and label
-    const extractSelector = async (element: any) => {
-      const id = await element.getAttribute('id');
-      const name = await element.getAttribute('name');
-      const testId = await element.getAttribute('data-testid');
-      const placeholder = await element.getAttribute('placeholder');
-      const ariaLabel = await element.getAttribute('aria-label');
-      const innerText = await element.evaluate((el: any) => el.textContent?.trim());
+    const detected: DetectedElement[] = [];
 
+    // Helper to check if an element is visible
+    async function isVisible(element: any): Promise<boolean> {
+      return await element.evaluate((el: HTMLElement) => {
+        const style = window.getComputedStyle(el);
+        return (
+          style &&
+          style.visibility !== 'hidden' &&
+          style.display !== 'none' &&
+          el.offsetParent !== null &&
+          el.offsetWidth > 0 &&
+          el.offsetHeight > 0
+        );
+      });
+    }
+
+    // Crawl input elements (text, email, password, etc.)
+    const inputElements = await page.$$('input');
+    for (const element of inputElements) {
+      if (!(await isVisible(element))) continue;
+      const type = (await element.getAttribute('type')) || 'text';
+      let detectedType = '';
+      if (['text', 'email', 'password', 'search', 'tel', 'url'].includes(type)) {
+        detectedType = 'input_text';
+      } else if (type === 'checkbox') {
+        detectedType = 'checkbox';
+      } else if (type === 'radio') {
+        detectedType = 'radio';
+      } else if (type === 'submit' || type === 'button') {
+        detectedType = 'button';
+      } else {
+        continue;
+      }
+      const name = await element.getAttribute('name');
+      const id = await element.getAttribute('id');
+      const label = name || id || undefined;
       const selector =
         (id && `#${id}`) ||
         (name && `[name="${name}"]`) ||
-        (testId && `[data-testid="${testId}"]`) ||
-        (placeholder && `[placeholder="${placeholder}"]`) ||
-        (ariaLabel && `[aria-label="${ariaLabel}"]`) ||
-        (innerText && `text="${innerText}"`);
-
-      const label = ariaLabel || placeholder || innerText || name || id || testId || undefined;
-      return { selector, label };
-    };
-
-    // Define all interactable types and their selectors
-    const interactables = [
-      { type: 'input', selector: 'input:not([type="hidden"])' },
-      { type: 'button', selector: 'button, input[type="button"], input[type="submit"], [role="button"]' },
-      { type: 'link', selector: 'a[href], [role="link"]' },
-      { type: 'slider', selector: 'input[type="range"], [role="slider"]' },
-      { type: 'textarea', selector: 'textarea' },
-      { type: 'checkbox', selector: 'input[type="checkbox"], [role="checkbox"]' },
-      { type: 'radio', selector: 'input[type="radio"], [role="radio"]' },
-      { type: 'dropdown', selector: 'select, [role="combobox"]' },
-    ];
-
-    const detected: DetectedElement[] = [];
-
-    for (const { type, selector } of interactables) {
-      const elements = await page.$$(selector);
-      for (const element of elements) {
-        const { selector: sel, label } = await extractSelector(element);
-        if (sel) {
-          detected.push({ type, selector: sel, label });
-        }
+        (await element.getAttribute('placeholder') && `[placeholder="${await element.getAttribute('placeholder')}"]`);
+      if (selector) {
+        detected.push({ type: detectedType, selector, label });
       }
     }
 
-    console.log('Detected elements:', detected);
+    // Crawl textarea elements
+    const textareas = await page.$$('textarea');
+    for (const element of textareas) {
+      if (!(await isVisible(element))) continue;
+      const name = await element.getAttribute('name');
+      const id = await element.getAttribute('id');
+      const label = name || id || undefined;
+      const selector =
+        (id && `#${id}`) ||
+        (name && `[name="${name}"]`) ||
+        (await element.getAttribute('placeholder') && `[placeholder="${await element.getAttribute('placeholder')}"]`);
+      if (selector) {
+        detected.push({ type: 'textarea', selector, label });
+      }
+    }
+
+    // Crawl select (dropdown) elements
+    const selects = await page.$$('select');
+    for (const element of selects) {
+      if (!(await isVisible(element))) continue;
+      const name = await element.getAttribute('name');
+      const id = await element.getAttribute('id');
+      const label = name || id || undefined;
+      const selector =
+        (id && `#${id}`) ||
+        (name && `[name="${name}"]`);
+      if (selector) {
+        detected.push({ type: 'dropdown', selector, label });
+      }
+    }
+
+    // Crawl button elements
+    const buttons = await page.$$('button');
+    for (const element of buttons) {
+      if (!(await isVisible(element))) continue;
+      const name = await element.getAttribute('name');
+      const id = await element.getAttribute('id');
+      const label = name || id || undefined;
+      const selector =
+        (id && `#${id}`) ||
+        (name && `[name="${name}"]`);
+      if (selector) {
+        detected.push({ type: 'button', selector, label });
+      }
+    }
+
+    // Crawl visible links
+    const links = await page.$$('a[href]');
+    for (const element of links) {
+      if (!(await isVisible(element))) continue;
+      const text = await element.innerText();
+      const selector = `text="${text.trim()}"`;
+      detected.push({ type: 'link', selector, label: text.trim() });
+    }
+
     return detected;
   } finally {
     await browser.close();

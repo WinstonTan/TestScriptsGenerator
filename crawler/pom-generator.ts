@@ -1,80 +1,93 @@
-node_modules/
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Define the DetectedElements type
-type DetectedElements = {
-  inputs: string[];
-  buttons: string[];
-  dropdowns: string[];
-  checkboxes: string[];
-  radios: string[];
-  links: string[];
+// Define the DetectedElement type
+type DetectedElement = {
+  type: string;
+  selector: string;
+  label?: string;
 };
 
-export async function generatePOM(pageName: string, elements: DetectedElements): Promise<string> {
-  let code = `import { Page, Locator } from '@playwright/test';\n\n`;
-  code += `export class ${pageName}Page {\n`;
+export async function generatePOM(pageName: string, elements: DetectedElement[]): Promise<string> {
+  function toPascalCase(str: string) {
+    return str
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/[_\-\s]+/g, ' ')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join('');
+  }
+  const baseName = pageName.replace(/Page$/i, '');
+  const className = `${toPascalCase(baseName)}Page`;
 
-  // Declare the `page` field
+  let code = `import { Page, Locator } from '@playwright/test';\n\n`;
+  code += `class ${className} {\n`;
   code += `  private readonly page: Page;\n`;
 
-  // Arrays to store variable declarations, constructor initializations, and methods
   const variableDeclarations: string[] = [];
   const initializedLocators: string[] = [];
   const methods: string[] = [];
-  const processedLocators = new Set<string>(); // To track processed locators
+  const processedLocators = new Set<string>();
 
   const sanitizeName = (name: string): string => {
     return name
-      .replace(/[^a-zA-Z0-9]/g, ' ') // Replace non-alphanumeric characters with spaces
+      .replace(/[^a-zA-Z0-9]/g, ' ')
       .split(' ')
-      .filter((word) => word) // Remove empty strings
+      .filter((word) => word)
       .map((word, index) => (index === 0 ? word.toLowerCase() : word.charAt(0).toUpperCase() + word.slice(1)))
       .join('');
   };
 
-  const addFieldWithMethods = (type: string, selector: string): void => {
-    if (!selector || processedLocators.has(selector)) return;
+  for (const el of elements) {
+    const { type, selector, label } = el;
+    if (!selector || processedLocators.has(selector)) continue;
     processedLocators.add(selector);
 
-    // Escape single quotes in selector for safe code generation
     const safeSelector = selector.replace(/'/g, "\\'");
+    const name = sanitizeName(label || selector);
+    const methodSuffix = name.charAt(0).toUpperCase() + name.slice(1);
 
-    const name = sanitizeName(selector);
-
-    // Variable declaration
     variableDeclarations.push(`  readonly ${name}: Locator;`);
-
-    // Constructor initialization
     initializedLocators.push(`    this.${name} = page.locator('${safeSelector}');`);
 
-    // Methods based on type
-    if (type === 'input' || type === 'textarea') {
+    if (type === 'input_text' || type === 'textarea') {
       methods.push(`
-  async fill${name.charAt(0).toUpperCase() + name.slice(1)}(value: string) {
+  async fill${methodSuffix}(value: string) {
     await this.${name}.fill(value);
   }`);
     }
-    if (type === 'button' || type === 'link' || type === 'checkbox' || type === 'radio' || type === 'dropdown') {
+    if (type === 'dropdown') {
       methods.push(`
-  async click${name.charAt(0).toUpperCase() + name.slice(1)}() {
+  async select${methodSuffix}(value: string) {
+    await this.${name}.selectOption(value);
+  }`);
+    }
+    if (type === 'checkbox' || type === 'radio') {
+      methods.push(`
+  async check${methodSuffix}() {
+    await this.${name}.check();
+  }
+  async uncheck${methodSuffix}() {
+    await this.${name}.uncheck();
+  }
+  async isChecked${methodSuffix}(): Promise<boolean> {
+    return await this.${name}.isChecked();
+  }`);
+    }
+    if (type === 'button' || type === 'link') {
+      methods.push(`
+  async click${methodSuffix}() {
     await this.${name}.click();
   }`);
     }
-  };
+  }
 
-  // Add fields and methods for each element type
-  Object.entries(elements).forEach(([type, selectors]) => {
-    selectors.forEach((selector) => addFieldWithMethods(type, selector));
-  });
-
-  // Build the class code
   code += variableDeclarations.join('\n') + '\n\n';
   code += `  constructor(page: Page) {\n    this.page = page;\n`;
   code += initializedLocators.join('\n') + '\n  }\n';
   code += methods.join('\n') + '\n';
-  code += '}\n';
+  code += '}\n\n';
+  code += `export { ${className} };\n`;
 
   return code;
 }
